@@ -7,11 +7,9 @@
  * 4. Handles report.capture requests from the popup
  */
 import { DomAdCleaner } from './dom-cleaner';
-import { captureFingerprint, diffFingerprint, BASELINE } from './fingerprint';
-import { AD_SELECTOR_ALL } from './selectors';
+import { mountReportButton, unmountReportButton } from './report-button';
 import { loadSettings, watchSettings } from '~/shared/settings';
-import { send, type AdReport, type RuntimeResponse } from '~/shared/messages';
-import { onMessage } from '~/shared/messages';
+import { send } from '~/shared/messages';
 import { rootLogger } from '~/shared/logger';
 import INLINE_STUB from './inline-stub?raw';
 
@@ -39,36 +37,6 @@ function injectStub(): void {
   }
 }
 
-/* ── Ad report capture ── */
-
-function captureReport(): AdReport {
-  const fp = captureFingerprint();
-  const changes = diffFingerprint(BASELINE, fp);
-
-  // Collect visible ad-related elements
-  const adEls: string[] = [];
-  try {
-    document.querySelectorAll(AD_SELECTOR_ALL).forEach((el) => {
-      const desc = `${el.tagName}#${el.id || ''}${el.className ? '.' + String(el.className).split(' ')[0] : ''}`;
-      adEls.push(desc);
-    });
-  } catch { /* ignore */ }
-
-  // Extract channel from URL
-  const channel = location.pathname.replace(/^\//, '').split('/')[0] || 'unknown';
-
-  return {
-    url: location.href,
-    channel,
-    timestamp: new Date().toISOString(),
-    fingerprint: changes.length > 0 ? changes : ['No changes from baseline'],
-    adDomains: fp.adDomains,
-    adElements: adEls.length > 0 ? adEls : ['None detected in DOM'],
-    playerTech: fp.playerTech,
-    extensionVersion: chrome.runtime.getManifest().version,
-  };
-}
-
 /* ── DOM cleaner ── */
 
 let cleaner: DomAdCleaner | null = null;
@@ -85,16 +53,6 @@ function stopCleaner(): void {
   cleaner?.stop();
   cleaner = null;
 }
-
-/* ── Message handler (popup → content) ── */
-
-onMessage(async (msg): Promise<RuntimeResponse | void> => {
-  if (msg.type === 'report.capture') {
-    const report = captureReport();
-    return { type: 'report', payload: report };
-  }
-  return undefined;
-});
 
 /* ── Bootstrap ── */
 
@@ -114,11 +72,16 @@ async function main(): Promise<void> {
     else document.addEventListener('DOMContentLoaded', startCleaner, { once: true });
   }
 
+  // Inject in-page report button (next to viewer count)
+  if (document.body) mountReportButton();
+  else document.addEventListener('DOMContentLoaded', mountReportButton, { once: true });
+
   watchSettings((next) => {
     log.setEnabled(next.debug);
-    if (!next.enabled) { stopCleaner(); return; }
+    if (!next.enabled) { stopCleaner(); unmountReportButton(); return; }
     if (next.blockDom && !cleaner) startCleaner();
     if (!next.blockDom && cleaner) stopCleaner();
+    mountReportButton();
   });
 
   log.info('Active');
