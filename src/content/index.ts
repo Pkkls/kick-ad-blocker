@@ -73,8 +73,15 @@ async function main(): Promise<void> {
   }
 
   // Inject in-page report button (next to viewer count)
-  if (document.body) mountReportButton();
-  else document.addEventListener('DOMContentLoaded', mountReportButton, { once: true });
+  mountReportButton();
+
+  // Re-mount on SPA navigation (Kick uses pushState)
+  const origPush = history.pushState.bind(history);
+  history.pushState = (...args) => {
+    origPush(...args);
+    setTimeout(mountReportButton, 2_000);
+  };
+  window.addEventListener('popstate', () => setTimeout(mountReportButton, 2_000));
 
   watchSettings((next) => {
     log.setEnabled(next.debug);

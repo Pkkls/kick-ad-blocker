@@ -156,22 +156,35 @@ function tryInject(): boolean {
 }
 
 /**
- * Mount the report button. Polls until the viewer count element
- * appears (Kick loads it dynamically), then stops.
+ * Mount the report button. Uses both polling and MutationObserver
+ * to handle Kick's dynamic React rendering reliably.
  */
 export function mountReportButton(): void {
   if (tryInject()) return;
 
-  // Kick is an SPA — viewer count may not exist yet. Observe until it appears.
+  // Poll every 2s (React hydration can be slow on Kick)
+  let attempts = 0;
+  const MAX_ATTEMPTS = 30; // 60s total
+  const poll = setInterval(() => {
+    attempts++;
+    if (tryInject() || attempts >= MAX_ATTEMPTS) {
+      clearInterval(poll);
+    }
+  }, 2_000);
+
+  // Also use MutationObserver for faster detection
   const observer = new MutationObserver(() => {
     if (tryInject()) {
       observer.disconnect();
+      clearInterval(poll);
     }
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (document.documentElement) {
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
 
-  // Safety timeout — stop observing after 60s
-  setTimeout(() => observer.disconnect(), 60_000);
+  // Safety cleanup
+  setTimeout(() => { observer.disconnect(); clearInterval(poll); }, 60_000);
 }
 
 /** Remove the button (e.g. when extension is disabled). */
