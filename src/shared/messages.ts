@@ -1,6 +1,17 @@
 import type { BlockStats } from './types';
 import type { Settings } from './settings';
 
+export interface AdReport {
+  url: string;
+  channel: string;
+  timestamp: string;
+  fingerprint: string[];
+  adDomains: string[];
+  adElements: string[];
+  playerTech: string;
+  extensionVersion: string;
+}
+
 export type RuntimeMessage =
   | { type: 'settings.get' }
   | { type: 'settings.set'; payload: Partial<Settings> }
@@ -10,6 +21,7 @@ export type RuntimeMessage =
   | { type: 'stats.domBlocked'; payload: { count: number } }
   | { type: 'fingerprint.changed'; payload: { changes: string[] } }
   | { type: 'fingerprint.get' }
+  | { type: 'report.capture' }
   | { type: 'open.options' }
   | { type: 'ping' };
 
@@ -17,6 +29,7 @@ export type RuntimeResponse =
   | { type: 'settings'; payload: Settings }
   | { type: 'stats'; payload: BlockStats }
   | { type: 'fingerprint'; payload: { changes: string[]; lastCheck: number } }
+  | { type: 'report'; payload: AdReport }
   | { type: 'ack' }
   | { type: 'error'; payload: { message: string } };
 

@@ -41,6 +41,7 @@ export default defineManifest({
   permissions: [
     'storage',
     'alarms',
+    'activeTab',
     'declarativeNetRequest',
     'declarativeNetRequestFeedback',
   ],
