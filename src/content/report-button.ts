@@ -110,7 +110,7 @@ function createButton(): HTMLButtonElement {
     cursor: 'pointer',
     padding: '4px',
     borderRadius: '4px',
-    marginLeft: '8px',
+    marginRight: '8px',
     transition: 'color 0.15s, background 0.15s',
     flexShrink: '0',
   } satisfies Partial<Record<keyof CSSStyleDeclaration, string>>);
@@ -140,17 +140,17 @@ function createButton(): HTMLButtonElement {
 const VIEWER_ROW_SELECTOR = '[data-testid="viewer-count"]';
 
 function tryInject(): boolean {
-  // Already injected?
   if (document.getElementById(BTN_ID)) return true;
 
   const viewerCount = document.querySelector(VIEWER_ROW_SELECTOR);
   if (!viewerCount) return false;
 
-  // Go up to the flex row that holds viewer count + share + report
-  const row = viewerCount.closest('.flex.items-center') ?? viewerCount.parentElement;
+  // Parent is the flex row: div.flex.items-center.gap-2.self-end.py-0.5
+  const row = viewerCount.parentElement;
   if (!row) return false;
 
-  row.appendChild(createButton());
+  // Insert BEFORE the viewer count (left side)
+  row.insertBefore(createButton(), viewerCount);
   log.debug('Report button injected');
   return true;
 }
