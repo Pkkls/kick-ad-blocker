@@ -1,5 +1,4 @@
 import { DomAdCleaner } from './dom-cleaner';
-import { checkForChanges } from './fingerprint';
 import { loadSettings, watchSettings } from '~/shared/settings';
 import { send } from '~/shared/messages';
 import { rootLogger } from '~/shared/logger';
@@ -115,14 +114,6 @@ async function main(): Promise<void> {
     if (next.blockDom && !cleaner) startCleaner();
     if (!next.blockDom && cleaner) stopCleaner();
   });
-
-  // Run ad-tech fingerprint check after page settles (30s delay)
-  setTimeout(() => {
-    const changes = checkForChanges();
-    if (changes.length > 0) {
-      send({ type: 'fingerprint.changed', payload: { changes } }).catch(() => {});
-    }
-  }, 30_000);
 
   log.info('Kick Ad Blocker active');
 }
