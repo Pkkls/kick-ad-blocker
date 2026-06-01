@@ -1,21 +1,26 @@
 {
   "name": "kick-ad-blocker",
   "version": "1.0.0",
-  "private": true,
-  "description": "Block ads on Kick.com — lightweight MV3 extension for Chrome & Firefox.",
+  "private": false,
+  "description": "Block ads on Kick.com — lightweight MV3 extension for Chrome, Brave, Edge & Firefox.",
   "license": "MIT",
   "author": "Pkkls",
+  "homepage": "https://github.com/Pkkls/kick-ad-blocker",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Pkkls/kick-ad-blocker.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b --noEmit && vite build && tsx scripts/bundle-content.ts",
-    "build:firefox": "BROWSER=firefox vite build && tsx scripts/bundle-content.ts",
-    "preview": "vite preview",
+    "build:firefox": "cross-env BROWSER=firefox vite build && tsx scripts/bundle-content.ts",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "tsx scripts/generate-icons.ts",
-    "pack": "tsx scripts/pack.ts"
+    "pack": "tsx scripts/pack.ts",
+    "pack:all": "npm run build && npm run pack && cross-env BROWSER=firefox npm run build:firefox && npm run pack"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",
@@ -24,6 +29,7 @@
     "@types/node": "^22.7.4",
     "@vitest/coverage-v8": "^2.1.2",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^7.0.3",
     "happy-dom": "^15.7.4",
     "postcss": "^8.4.47",
     "sharp": "^0.33.5",
