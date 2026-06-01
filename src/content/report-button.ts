@@ -6,15 +6,37 @@ const REPO = 'Pkkls/kick-ad-blocker';
 const BTN_ID = 'kab-report-btn';
 const VC_SELECTOR = '[data-testid="viewer-count"]';
 
+function createSvgIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z');
+  const line = document.createElementNS(ns, 'line');
+  line.setAttribute('x1', '4');
+  line.setAttribute('y1', '22');
+  line.setAttribute('x2', '4');
+  line.setAttribute('y2', '15');
+
+  svg.appendChild(path);
+  svg.appendChild(line);
+  return svg;
+}
+
 function createButton(): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.id = BTN_ID;
   btn.type = 'button';
   btn.title = 'Report an ad to Kick Ad Blocker';
-  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-    <line x1="4" y1="22" x2="4" y2="15"/></svg>`;
+  btn.appendChild(createSvgIcon());
 
   btn.style.cssText = `
     display:inline-flex;align-items:center;justify-content:center;
@@ -29,10 +51,24 @@ function createButton(): HTMLButtonElement {
   btn.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+
     const channel = location.pathname.replace(/^\//, '').split('/')[0] || 'unknown';
+    // Strip query params to avoid leaking tracking data
+    const cleanUrl = location.origin + location.pathname;
+
+    const ok = confirm(
+      `Report an ad on "${channel}"?\n\n` +
+      `This will open a public GitHub issue with:\n` +
+      `• Channel: ${channel}\n` +
+      `• URL: ${cleanUrl}\n\n` +
+      `No personal data is included.`,
+    );
+    if (!ok) return;
+
     const title = encodeURIComponent(`Ad report: ${channel}`);
     const body = encodeURIComponent(
-      `## Ad Report\n\n**Channel:** ${channel}\n**URL:** ${location.href}\n**Time:** ${new Date().toISOString()}\n\n### What I saw\n_Describe the ad (pre-roll, banner, overlay):_\n\n---\n_Kick Ad Blocker_`,
+      `## Ad Report\n\n**Channel:** ${channel}\n**URL:** ${cleanUrl}\n\n` +
+      `### What I saw\n_Describe the ad (pre-roll, banner, overlay):_\n\n---\n_Kick Ad Blocker_`,
     );
     window.open(`https://github.com/${REPO}/issues/new?title=${title}&body=${body}&labels=ad-report`, '_blank');
   };
@@ -45,20 +81,15 @@ function tryInject(): boolean {
   const vc = document.querySelector(VC_SELECTOR);
   if (!vc?.parentElement) return false;
   vc.parentElement.insertBefore(createButton(), vc);
-  console.log('[KAB] Report button injected');
   return true;
 }
 
 export function mountReportButton(): void {
-  console.log('[KAB] mountReportButton called, vc exists:', !!document.querySelector(VC_SELECTOR));
   if (tryInject()) return;
 
   let attempts = 0;
   const poll = setInterval(() => {
-    if (tryInject() || ++attempts >= 30) {
-      clearInterval(poll);
-      if (attempts >= 30) console.warn('[KAB] Report button: gave up after 30 attempts');
-    }
+    if (tryInject() || ++attempts >= 30) clearInterval(poll);
   }, 2_000);
 }
 

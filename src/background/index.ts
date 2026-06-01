@@ -64,13 +64,6 @@ onMessage(async (msg): Promise<RuntimeResponse | void> => {
     }
     case 'stats.get': {
       const stats = await getStats();
-      // Also try to get declarativeNetRequest matched rules count
-      try {
-        const matched = await chrome.declarativeNetRequest.getMatchedRules();
-        stats.networkBlocked = matched.rulesMatchedInfo.length;
-      } catch {
-        // declarativeNetRequestFeedback might not be available
-      }
       return { type: 'stats', payload: stats };
     }
     case 'stats.reset': {

@@ -41,10 +41,11 @@ export default defineManifest({
   permissions: [
     'storage',
     'alarms',
-    'activeTab',
     'declarativeNetRequest',
-    'declarativeNetRequestFeedback',
   ],
+  content_security_policy: {
+    extension_pages: "script-src 'self'; object-src 'self'",
+  },
   host_permissions: [
     'https://kick.com/*',
     'https://www.kick.com/*',
