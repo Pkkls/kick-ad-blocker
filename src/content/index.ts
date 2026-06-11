@@ -79,6 +79,15 @@ async function main(): Promise<void> {
   injectStub();
   if (settings.blockVideoAds) injectHlsProxy();
 
+  // Bridge ad-block signals from the MAIN-world neutralizer to the stat counter.
+  window.addEventListener('message', (e) => {
+    if (e.source !== window) return;
+    const d = e.data as { source?: string; type?: string } | null;
+    if (d?.source === 'kab' && d.type === 'playbackAdBlocked') {
+      send({ type: 'stats.videoAdBlocked', payload: { count: 1 } }).catch(() => {});
+    }
+  });
+
   if (settings.blockDom) {
     if (document.body) startCleaner();
     else document.addEventListener('DOMContentLoaded', startCleaner, { once: true });
