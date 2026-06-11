@@ -1,28 +1,27 @@
 import { rootLogger } from '~/shared/logger';
 import { AD_SELECTOR_ALL } from './selectors';
-import { AD_MAX_DURATION_SEC, AD_VIDEO_SRC_PATTERNS, CATEGORY_URL_PATTERNS } from '~/shared/constants';
+import { AD_VIDEO_SRC_PATTERNS } from '~/shared/constants';
 
 const log = rootLogger.child('video');
 
 const AD_VIDEO_MARKER = 'data-kab-video-ad';
 
-function isCategoryPage(): boolean {
-  return CATEGORY_URL_PATTERNS.some((re) => re.test(location.href));
-}
+// Same-origin Kick UI assets — follow/sub/gift animations, emotes, badges — are
+// short videos but never ads. Explicitly excluded to avoid false positives.
+const BENIGN_SRC = /^https?:\/\/(?:[a-z0-9-]+\.)*kick\.com\/(?:img|images|animations|emotes|assets|badges)\//i;
 
+// An ad video must carry a STRONG signal — a real ad src/domain or an ad
+// container. A short duration is NOT a signal: Kick's own follow/sub/gift
+// animations are short clips too. The server-side ad flags in the /playback
+// response (neutralized in hls-proxy.js) are the real gate for the preroll.
 function isAdVideo(video: HTMLVideoElement): boolean {
   const src = video.src || video.currentSrc || '';
 
+  if (src && BENIGN_SRC.test(src)) return false;
   if (src && AD_VIDEO_SRC_PATTERNS.some((re) => re.test(src))) return true;
 
-  // Duration heuristic only on category/browse pages, and only for finite short
-  // clips — live streams report Infinity/NaN and must never be skipped.
-  if (isCategoryPage() && Number.isFinite(video.duration) && video.duration > 0 && video.duration < AD_MAX_DURATION_SEC) return true;
-
-  // Parent element matches a known ad overlay selector
   try {
-    const parent = video.closest(AD_SELECTOR_ALL);
-    if (parent) return true;
+    if (video.closest(AD_SELECTOR_ALL)) return true;
   } catch { /* invalid selector edge case */ }
 
   return false;
