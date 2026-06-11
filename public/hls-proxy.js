@@ -2,69 +2,34 @@
   if (window.__kab_hls_proxy) return;
   window.__kab_hls_proxy = true;
 
+  // Remove SCTE-35 ad blocks from an HLS media playlist.
+  // Only acts on explicit ad signalling (CUE-OUT/CUE-IN). Returns the original
+  // string unchanged when nothing was removed, so callers can skip rebuilding.
   function scrubHlsManifest(text) {
-    if (!text.includes('#EXT-X-DISCONTINUITY')) return text;
+    if (text.indexOf('#EXT-X-CUE-OUT') === -1) return text;
 
-    var hasAdMarker = (
-      text.includes('#EXT-X-CUE-OUT') ||
-      text.includes('SCTE35') ||
-      text.includes('#EXT-X-DATERANGE')
-    );
-
-    if (!hasAdMarker) {
-      var inDisc = false;
-      var lines = text.split('\n');
-      for (var i = 0; i < lines.length; i++) {
-        var line = lines[i].trim();
-        if (line === '#EXT-X-DISCONTINUITY') { inDisc = true; continue; }
-        if (inDisc && line.startsWith('#EXTINF:')) {
-          var dur = parseFloat(line.slice(8));
-          if (!isNaN(dur) && dur < 4) { hasAdMarker = true; break; }
-        }
-        if (inDisc && (line === '' || line.startsWith('#EXT-X-DISCONTINUITY')) && !line.startsWith('#EXTINF:')) {
-          inDisc = false;
-        }
-      }
-    }
-
-    if (!hasAdMarker) return text;
-
-    var result = [];
     var lines = text.split('\n');
+    var result = [];
     var skipping = false;
+    var changed = false;
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var trimmed = line.trim();
 
-      if (!skipping && (trimmed === '#EXT-X-CUE-OUT' || trimmed.startsWith('#EXT-X-CUE-OUT:'))) {
+      if (!skipping && (trimmed === '#EXT-X-CUE-OUT' || trimmed.indexOf('#EXT-X-CUE-OUT:') === 0)) {
         skipping = true;
+        changed = true;
+        // Drop the DISCONTINUITY that opens the ad break (last emitted line).
         if (result.length > 0 && result[result.length - 1].trim() === '#EXT-X-DISCONTINUITY') {
           result.pop();
         }
         continue;
       }
 
-      if (!skipping && trimmed === '#EXT-X-DISCONTINUITY' && hasAdMarker) {
-        for (var j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-          var peek = lines[j].trim();
-          if (peek.startsWith('#EXTINF:')) {
-            var peekDur = parseFloat(peek.slice(8));
-            if (!isNaN(peekDur) && peekDur < 4) {
-              skipping = true;
-              break;
-            } else {
-              break;
-            }
-          }
-        }
-        if (skipping) continue;
-      }
-
       if (skipping) {
-        if (trimmed === '#EXT-X-CUE-IN' || trimmed === '#EXT-X-DISCONTINUITY') {
+        if (trimmed === '#EXT-X-CUE-IN') {
           skipping = false;
-          if (trimmed === '#EXT-X-DISCONTINUITY') result.push(line);
         }
         continue;
       }
@@ -72,27 +37,33 @@
       result.push(line);
     }
 
-    return result.join('\n');
+    return changed ? result.join('\n') : text;
   }
 
-  // --- fetch wrapper ---
+  // --- fetch wrapper (main thread) ---
   var origFetch = window.fetch;
   window.fetch = function (input, init) {
     return origFetch.call(this, input, init).then(function (response) {
       var url = response.url || (typeof input === 'string' ? input : '');
-      if (!url.includes('.m3u8')) return response;
+      if (url.indexOf('.m3u8') === -1) return response;
       return response.text().then(function (text) {
         var scrubbed = scrubHlsManifest(text);
+        if (scrubbed === text) {
+          return new Response(text, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          });
+        }
         return new Response(scrubbed, {
           status: response.status,
           statusText: response.statusText,
-          headers: response.headers,
         });
       });
     });
   };
 
-  // --- XHR wrapper ---
+  // --- XHR wrapper (main thread) ---
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__kab_url = typeof url === 'string' ? url : String(url);
@@ -105,34 +76,11 @@
       var orig = origResponseTextDesc && origResponseTextDesc.get
         ? origResponseTextDesc.get.call(this)
         : '';
-      if (this.__kab_url && this.__kab_url.includes('.m3u8')) {
+      if (this.__kab_url && this.__kab_url.indexOf('.m3u8') !== -1) {
         return scrubHlsManifest(orig);
       }
       return orig;
     },
     configurable: true,
   });
-
-  // --- Worker wrapper ---
-  // Kick streams via MediaSourceHandle (Worker-based MSE). Wrap Worker constructor
-  // to prepend our fetch patch into every spawned worker via Blob + importScripts.
-  var OrigWorker = window.Worker;
-  window.Worker = function KabWorker(scriptUrl, opts) {
-    var isModule = opts && opts.type === 'module';
-    if (isModule) {
-      return new OrigWorker(scriptUrl, opts);
-    }
-    var patchCode = '(' + scrubHlsManifest.toString() + ');\n' +
-      'var _kf=self.fetch;self.fetch=function(i,o){return _kf.call(this,i,o).then(function(r){' +
-      'var u=r.url||(typeof i==="string"?i:"");if(!u.includes(".m3u8"))return r;' +
-      'return r.text().then(function(t){var s=scrubHlsManifest(t);' +
-      'return new Response(s,{status:r.status,statusText:r.statusText,headers:r.headers});});});};' +
-      'importScripts(' + JSON.stringify(scriptUrl) + ');';
-    var blob = new Blob([patchCode], { type: 'application/javascript' });
-    var blobUrl = URL.createObjectURL(blob);
-    var worker = new OrigWorker(blobUrl, opts);
-    setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 5000);
-    return worker;
-  };
-  window.Worker.prototype = OrigWorker.prototype;
 })();

@@ -19,7 +19,9 @@ export const AD_SELECTORS: readonly string[] = [
   '[class*="ad-container"]',
   '[class*="ad_container"]',
   '[class*="advertisement"]',
-  '[class*="video-ad"]',
+  // Anchored to avoid matching benign classes like "video-adaptive"
+  '[class~="video-ad"]',
+  '[class*="video-ad-"]',
   '[class*="preroll"]',
   '[class*="midroll"]',
 

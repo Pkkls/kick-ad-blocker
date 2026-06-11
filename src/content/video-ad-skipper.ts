@@ -1,30 +1,23 @@
 import { rootLogger } from '~/shared/logger';
 import { AD_SELECTOR_ALL } from './selectors';
+import { AD_MAX_DURATION_SEC, AD_VIDEO_SRC_PATTERNS, CATEGORY_URL_PATTERNS } from '~/shared/constants';
 
 const log = rootLogger.child('video');
 
-const AD_MAX_DURATION_SEC = 15;
 const AD_VIDEO_MARKER = 'data-kab-video-ad';
 
-const AD_SRC_PATTERNS: readonly RegExp[] = [
-  /imasdk\.googleapis\.com/,
-  /doubleclick\.net/,
-  /googlesyndication\.com/,
-  /googleadservices\.com/,
-  /\bad[_-]?(video|slot|preroll|midroll)\b/i,
-];
-
 function isCategoryPage(): boolean {
-  return /^\/categories(\/|$)|\/(browse|category)(\/|$)/.test(location.pathname);
+  return CATEGORY_URL_PATTERNS.some((re) => re.test(location.href));
 }
 
 function isAdVideo(video: HTMLVideoElement): boolean {
   const src = video.src || video.currentSrc || '';
 
-  if (src && AD_SRC_PATTERNS.some((re) => re.test(src))) return true;
+  if (src && AD_VIDEO_SRC_PATTERNS.some((re) => re.test(src))) return true;
 
-  // Duration heuristic only on category/browse pages to avoid false positives on stream pages
-  if (isCategoryPage() && video.duration > 0 && video.duration < AD_MAX_DURATION_SEC) return true;
+  // Duration heuristic only on category/browse pages, and only for finite short
+  // clips — live streams report Infinity/NaN and must never be skipped.
+  if (isCategoryPage() && Number.isFinite(video.duration) && video.duration > 0 && video.duration < AD_MAX_DURATION_SEC) return true;
 
   // Parent element matches a known ad overlay selector
   try {
@@ -86,20 +79,22 @@ export class VideoAdSkipper {
   }
 
   private handleLoaded(video: HTMLVideoElement): void {
+    // loadedmetadata can fire repeatedly on src changes — count each ad once.
+    if (video.hasAttribute(AD_VIDEO_MARKER)) return;
     if (!isAdVideo(video)) return;
 
+    video.setAttribute(AD_VIDEO_MARKER, 'pending');
     log.info('Ad video detected, skipping', video.src || video.currentSrc);
-    video.currentTime = video.duration;
+    if (Number.isFinite(video.duration)) video.currentTime = video.duration;
 
     setTimeout(() => {
       // If the element is still in the DOM after the skip, hide it
-      if (document.contains(video) && !video.hasAttribute(AD_VIDEO_MARKER)) {
-        video.setAttribute(AD_VIDEO_MARKER, '1');
+      if (document.contains(video)) {
         video.style.setProperty('display', 'none', 'important');
         log.debug('Ad video element hidden after persist');
       }
       this.skippedCount++;
-      this.onBlock(this.skippedCount);
+      this.onBlock(1); // delta, not cumulative — background accumulates with +=
     }, 500);
   }
 }

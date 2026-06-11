@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   }
 
   injectStub();
-  injectHlsProxy();
+  if (settings.blockVideoAds) injectHlsProxy();
 
   if (settings.blockDom) {
     if (document.body) startCleaner();
