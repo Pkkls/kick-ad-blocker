@@ -1,12 +1,6 @@
-/**
- * Content script entry point — runs at document_start on kick.com.
- *
- * 1. Injects the googletag/IMA stub into MAIN world (prevents ad init)
- * 2. Starts a MutationObserver to hide any ad-related DOM elements
- * 3. Watches settings to toggle layers on/off at runtime
- * 4. Handles report.capture requests from the popup
- */
 import { DomAdCleaner } from './dom-cleaner';
+import { VideoAdSkipper } from './video-ad-skipper';
+import { injectHlsProxy } from './hls-proxy';
 import { mountReportButton, unmountReportButton } from './report-button';
 import { loadSettings, watchSettings } from '~/shared/settings';
 import { send } from '~/shared/messages';
@@ -54,6 +48,23 @@ function stopCleaner(): void {
   cleaner = null;
 }
 
+/* ── Video ad skipper ── */
+
+let skipper: VideoAdSkipper | null = null;
+
+function startSkipper(): void {
+  if (skipper) return;
+  skipper = new VideoAdSkipper((count) => {
+    send({ type: 'stats.videoAdBlocked', payload: { count } }).catch(() => {});
+  });
+  skipper.start();
+}
+
+function stopSkipper(): void {
+  skipper?.stop();
+  skipper = null;
+}
+
 /* ── Bootstrap ── */
 
 async function main(): Promise<void> {
@@ -66,10 +77,16 @@ async function main(): Promise<void> {
   }
 
   injectStub();
+  injectHlsProxy();
 
   if (settings.blockDom) {
     if (document.body) startCleaner();
     else document.addEventListener('DOMContentLoaded', startCleaner, { once: true });
+  }
+
+  if (settings.blockVideoAds) {
+    if (document.body) startSkipper();
+    else document.addEventListener('DOMContentLoaded', startSkipper, { once: true });
   }
 
   // Inject in-page report button (next to viewer count)
@@ -85,9 +102,11 @@ async function main(): Promise<void> {
 
   watchSettings((next) => {
     log.setEnabled(next.debug);
-    if (!next.enabled) { stopCleaner(); unmountReportButton(); return; }
+    if (!next.enabled) { stopCleaner(); stopSkipper(); unmountReportButton(); return; }
     if (next.blockDom && !cleaner) startCleaner();
     if (!next.blockDom && cleaner) stopCleaner();
+    if (next.blockVideoAds && !skipper) startSkipper();
+    if (!next.blockVideoAds && skipper) stopSkipper();
     mountReportButton();
   });
 

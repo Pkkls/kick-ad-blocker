@@ -19,6 +19,7 @@ export type RuntimeMessage =
   | { type: 'stats.get' }
   | { type: 'stats.reset' }
   | { type: 'stats.domBlocked'; payload: { count: number } }
+  | { type: 'stats.videoAdBlocked'; payload: { count: number } }
   | { type: 'fingerprint.changed'; payload: { changes: string[] } }
   | { type: 'fingerprint.get' }
   | { type: 'report.capture' }

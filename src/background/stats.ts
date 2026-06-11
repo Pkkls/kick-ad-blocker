@@ -42,6 +42,12 @@ export async function addDomHidden(count: number): Promise<void> {
   await save();
 }
 
+export async function addVideoAdBlocked(count: number): Promise<void> {
+  const s = await load();
+  s.videoAdsBlocked += count;
+  await save();
+}
+
 export async function resetStats(): Promise<BlockStats> {
   cached = emptyStats();
   await save();

@@ -41,3 +41,24 @@ export function isAdElement(el: Element): boolean {
     return false;
   }
 }
+
+export const CATEGORY_AD_SELECTORS: readonly string[] = [
+  '[class*="ad-overlay"]',
+  '[class*="preroll-overlay"]',
+  '[class*="channel-preview-ad"]',
+  '[data-ad-slot]',
+  '[class*="video-ad-overlay"]',
+  '[class*="ad-banner"]',
+  '[class*="kick-ad"]',
+  '[class*="category-ad"]',
+];
+
+export const CATEGORY_AD_SELECTOR_ALL = CATEGORY_AD_SELECTORS.join(', ');
+
+export const AD_OVERLAY_PATTERNS: readonly RegExp[] = [
+  /ad[-_]?container/i,
+  /preroll/i,
+  /video[-_]?ad/i,
+  /ad[-_]?overlay/i,
+  /sponsor/i,
+];

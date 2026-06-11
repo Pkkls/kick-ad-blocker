@@ -5,6 +5,7 @@ export const SettingsSchema = z.object({
   enabled: z.boolean().default(true),
   blockNetwork: z.boolean().default(true),
   blockDom: z.boolean().default(true),
+  blockVideoAds: z.boolean().default(true),
 
   // Optional domain blocking (off by default)
   blockGtm: z.boolean().default(false),

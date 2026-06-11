@@ -1,7 +1,7 @@
 import { onMessage, type RuntimeResponse } from '~/shared/messages';
 import { loadSettings, saveSettings, resetSettings } from '~/shared/settings';
 import { installKeepalive } from './keepalive';
-import { getStats, addDomHidden, resetStats } from './stats';
+import { getStats, addDomHidden, addVideoAdBlocked, resetStats } from './stats';
 import { rootLogger } from '~/shared/logger';
 
 const log = rootLogger.child('sw');
@@ -31,7 +31,7 @@ async function updateBadge(): Promise<void> {
     return;
   }
   const stats = await getStats();
-  const total = stats.networkBlocked + stats.domHidden;
+  const total = stats.networkBlocked + stats.domHidden + stats.videoAdsBlocked;
   const text = total > 0 ? (total > 999 ? `${Math.floor(total / 1000)}k` : String(total)) : '';
   await chrome.action.setBadgeText({ text });
   await chrome.action.setBadgeBackgroundColor({ color: '#53fc18' });
@@ -73,6 +73,11 @@ onMessage(async (msg): Promise<RuntimeResponse | void> => {
     }
     case 'stats.domBlocked': {
       await addDomHidden(msg.payload.count);
+      await updateBadge();
+      return { type: 'ack' };
+    }
+    case 'stats.videoAdBlocked': {
+      await addVideoAdBlocked(msg.payload.count);
       await updateBadge();
       return { type: 'ack' };
     }
