@@ -91,14 +91,78 @@
     return h;
   }
 
-  // --- fetch wrapper (main thread) ---
   var origFetch = window.fetch;
+
+  // --- SSAI ad-break monitor ---
+  // Kick uses Amazon IVS server-side ad insertion: the preroll/midroll is
+  // stitched into the HLS stream the worker plays, invisible to a main-thread
+  // proxy (and not gated by the playback ad flags). We can't see the worker's
+  // fetches, but we CAN fetch the same IVS media playlist ourselves and watch
+  // for ad markers — recording the exact format the moment an ad is stitched.
+  var KNOWN_DATERANGE_CLASSES = ['timestamp', 'live-video-net-stream-source'];
+  var monitorLive = null;
+  var monitorGen = 0;
+  var monitorSeen = {};
+
+  function adMarkersIn(text) {
+    var hits = [];
+    var lines = text.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (t.indexOf('#EXT-X-CUE-OUT') === 0 || t.indexOf('#EXT-X-CUE-IN') === 0 ||
+          t.indexOf('#EXT-X-SCTE35') === 0 || t.indexOf('#EXT-OATCLS-SCTE35') === 0 ||
+          t.indexOf('#EXT-X-ASSET') === 0 || t === '#EXT-X-DISCONTINUITY') {
+        hits.push(t);
+      } else if (t.indexOf('#EXT-X-DATERANGE') === 0) {
+        var m = t.match(/CLASS="([^"]*)"/);
+        if (KNOWN_DATERANGE_CLASSES.indexOf(m ? m[1] : '') === -1) hits.push(t);
+      }
+    }
+    return hits;
+  }
+
+  function pollMedia(mediaUrl, gen, left) {
+    if (gen !== monitorGen || left <= 0) return;
+    var delay = document.visibilityState === 'hidden' ? 6000 : 3000;
+    origFetch(mediaUrl).then(function (r) { return r.text(); }).then(function (txt) {
+      var hits = adMarkersIn(txt);
+      if (hits.length) {
+        // Collapse volatile timestamps/epochs so the same ad break dedups to one report.
+        var key = hits.join('|').replace(/\d{4}-\d\d-\d\dT[0-9:.Z+-]+/g, '<t>').replace(/\d{9,}/g, '<n>').slice(0, 250);
+        if (!monitorSeen[key]) {
+          monitorSeen[key] = 1;
+          report('manifest', 'SSAI ad markers in IVS playlist (' + hits.length + ')',
+            { markers: hits.map(redactLine).slice(0, 20) });
+        }
+      }
+    }).catch(function () {}).then(function () {
+      setTimeout(function () { pollMedia(mediaUrl, gen, left - 1); }, delay);
+    });
+  }
+
+  function startMonitor(liveUrl) {
+    if (!liveUrl || liveUrl === monitorLive) return;
+    monitorLive = liveUrl;
+    monitorSeen = {};
+    var gen = ++monitorGen;
+    origFetch(liveUrl).then(function (r) { return r.text(); }).then(function (master) {
+      if (gen !== monitorGen) return;
+      var mediaLine = master.split('\n').find(function (l) { return l.trim() && l.trim()[0] !== '#'; });
+      if (!mediaLine) return;
+      var mediaUrl;
+      try { mediaUrl = new URL(mediaLine.trim(), liveUrl).href; } catch (e) { return; }
+      pollMedia(mediaUrl, gen, 200); // ~10 min at 3s
+    }).catch(function () {});
+  }
+
+  // --- fetch wrapper (main thread) ---
   window.fetch = function (input, init) {
     return origFetch.call(this, input, init).then(function (response) {
       var url = response.url || (typeof input === 'string' ? input : (input && input.url) || '');
 
       if (PLAYBACK_RE.test(url)) {
         return response.clone().json().then(function (json) {
+          if (json.playback_url && json.playback_url.live) startMonitor(json.playback_url.live);
           if (!handlePlayback(json)) return response;
           return new Response(JSON.stringify(json), {
             status: response.status,
@@ -140,6 +204,7 @@
       if (PLAYBACK_RE.test(u)) {
         try {
           var json = JSON.parse(orig);
+          if (json.playback_url && json.playback_url.live) startMonitor(json.playback_url.live);
           if (handlePlayback(json)) return JSON.stringify(json);
         } catch (e) { /* not JSON yet */ }
         return orig;
