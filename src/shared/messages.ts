@@ -1,4 +1,4 @@
-import type { BlockStats } from './types';
+import type { BlockStats, AdDetection } from './types';
 import type { Settings } from './settings';
 
 export interface AdReport {
@@ -20,6 +20,9 @@ export type RuntimeMessage =
   | { type: 'stats.reset' }
   | { type: 'stats.domBlocked'; payload: { count: number } }
   | { type: 'stats.videoAdBlocked'; payload: { count: number } }
+  | { type: 'detection.add'; payload: AdDetection }
+  | { type: 'detection.list' }
+  | { type: 'detection.clear' }
   | { type: 'fingerprint.changed'; payload: { changes: string[] } }
   | { type: 'fingerprint.get' }
   | { type: 'report.capture' }
@@ -29,6 +32,7 @@ export type RuntimeMessage =
 export type RuntimeResponse =
   | { type: 'settings'; payload: Settings }
   | { type: 'stats'; payload: BlockStats }
+  | { type: 'detections'; payload: AdDetection[] }
   | { type: 'fingerprint'; payload: { changes: string[]; lastCheck: number } }
   | { type: 'report'; payload: AdReport }
   | { type: 'ack' }

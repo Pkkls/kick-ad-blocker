@@ -28,13 +28,18 @@ function isAdVideo(video: HTMLVideoElement): boolean {
   return false;
 }
 
+export interface VideoAdDetail {
+  src: string;
+  duration: number;
+}
+
 export class VideoAdSkipper {
   private observer: MutationObserver | null = null;
   private skippedCount = 0;
-  private onBlock: (count: number) => void;
+  private onBlock: (detail: VideoAdDetail) => void;
   private attached = new WeakSet<HTMLVideoElement>();
 
-  constructor(onBlock: (count: number) => void) {
+  constructor(onBlock: (detail: VideoAdDetail) => void) {
     this.onBlock = onBlock;
   }
 
@@ -84,8 +89,10 @@ export class VideoAdSkipper {
     if (!isAdVideo(video)) return;
 
     video.setAttribute(AD_VIDEO_MARKER, 'pending');
-    log.info('Ad video detected, skipping', video.src || video.currentSrc);
-    if (Number.isFinite(video.duration)) video.currentTime = video.duration;
+    const src = video.src || video.currentSrc || '';
+    const duration = video.duration;
+    log.info('Ad video detected, skipping', src);
+    if (Number.isFinite(duration)) video.currentTime = duration;
 
     setTimeout(() => {
       // If the element is still in the DOM after the skip, hide it
@@ -94,7 +101,7 @@ export class VideoAdSkipper {
         log.debug('Ad video element hidden after persist');
       }
       this.skippedCount++;
-      this.onBlock(1); // delta, not cumulative — background accumulates with +=
+      this.onBlock({ src: src.replace(/\?[^\s]*/g, '?<redacted>').slice(0, 200), duration });
     }, 500);
   }
 }

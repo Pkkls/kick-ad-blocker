@@ -54,8 +54,17 @@ let skipper: VideoAdSkipper | null = null;
 
 function startSkipper(): void {
   if (skipper) return;
-  skipper = new VideoAdSkipper((count) => {
-    send({ type: 'stats.videoAdBlocked', payload: { count } }).catch(() => {});
+  skipper = new VideoAdSkipper((detail) => {
+    send({
+      type: 'detection.add',
+      payload: {
+        kind: 'video',
+        ts: Date.now(),
+        channel: location.pathname.replace(/^\//, '') || location.hostname,
+        summary: `Client-side ad video skipped (${Math.round(detail.duration)}s)`,
+        data: detail as unknown as Record<string, unknown>,
+      },
+    }).catch(() => {});
   });
   skipper.start();
 }
@@ -79,13 +88,26 @@ async function main(): Promise<void> {
   injectStub();
   if (settings.blockVideoAds) injectHlsProxy();
 
-  // Bridge ad-block signals from the MAIN-world neutralizer to the stat counter.
+  // Bridge ad detections from the MAIN-world neutralizer: record forensic
+  // evidence (and count the block) the moment Kick actually serves an ad.
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
-    const d = e.data as { source?: string; type?: string } | null;
-    if (d?.source === 'kab' && d.type === 'playbackAdBlocked') {
-      send({ type: 'stats.videoAdBlocked', payload: { count: 1 } }).catch(() => {});
-    }
+    const d = e.data as {
+      source?: string; type?: string;
+      kind?: 'playback' | 'manifest' | 'video'; summary?: string;
+      data?: Record<string, unknown>;
+    } | null;
+    if (d?.source !== 'kab' || d.type !== 'adDetected' || !d.kind) return;
+    send({
+      type: 'detection.add',
+      payload: {
+        kind: d.kind,
+        ts: Date.now(),
+        channel: location.pathname.replace(/^\//, '') || location.hostname,
+        summary: d.summary ?? d.kind,
+        data: d.data ?? {},
+      },
+    }).catch(() => {});
   });
 
   if (settings.blockDom) {

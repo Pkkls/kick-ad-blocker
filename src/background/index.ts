@@ -2,6 +2,7 @@ import { onMessage, type RuntimeResponse } from '~/shared/messages';
 import { loadSettings, saveSettings, resetSettings } from '~/shared/settings';
 import { installKeepalive } from './keepalive';
 import { getStats, addDomHidden, addVideoAdBlocked, resetStats } from './stats';
+import { addDetection, listDetections, detectionCount, clearDetections } from './detections';
 import { rootLogger } from '~/shared/logger';
 
 const log = rootLogger.child('sw');
@@ -26,7 +27,18 @@ installKeepalive();
 
 async function updateBadge(): Promise<void> {
   const settings = await loadSettings();
-  if (!settings.showBadge || !settings.enabled) {
+  if (!settings.enabled) {
+    await chrome.action.setBadgeText({ text: '' });
+    return;
+  }
+  // A real ad detection takes priority — surface it as a red alert so the user
+  // notices Kick has started serving ads, regardless of the showBadge setting.
+  if (await detectionCount() > 0) {
+    await chrome.action.setBadgeText({ text: '!' });
+    await chrome.action.setBadgeBackgroundColor({ color: '#ff4444' });
+    return;
+  }
+  if (!settings.showBadge) {
     await chrome.action.setBadgeText({ text: '' });
     return;
   }
@@ -78,6 +90,22 @@ onMessage(async (msg): Promise<RuntimeResponse | void> => {
     }
     case 'stats.videoAdBlocked': {
       await addVideoAdBlocked(msg.payload.count);
+      await updateBadge();
+      return { type: 'ack' };
+    }
+    case 'detection.add': {
+      // A real ad was served and neutralized — record forensics and count it.
+      await addDetection(msg.payload);
+      await addVideoAdBlocked(1);
+      log.warn('Ad detected:', msg.payload.kind, msg.payload.summary);
+      await updateBadge();
+      return { type: 'ack' };
+    }
+    case 'detection.list': {
+      return { type: 'detections', payload: await listDetections() };
+    }
+    case 'detection.clear': {
+      await clearDetections();
       await updateBadge();
       return { type: 'ack' };
     }
