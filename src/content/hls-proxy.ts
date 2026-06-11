@@ -121,6 +121,33 @@ const HLS_PROXY_SCRIPT = /* js */`
     },
     configurable: true,
   });
+
+  // --- Worker wrapper ---
+  // Kick streams via MediaSourceHandle (Worker-based MSE). We wrap the Worker
+  // constructor to prepend our fetch+XHR patch into every spawned worker so
+  // HLS manifests fetched inside the worker are scrubbed before the player sees them.
+  var OrigWorker = window.Worker;
+  window.Worker = function KabWorker(scriptUrl, opts) {
+    var isModule = opts && opts.type === 'module';
+    // For module workers we cannot use importScripts — fall back to original.
+    if (isModule) {
+      return new OrigWorker(scriptUrl, opts);
+    }
+    // Build a blob worker that patches fetch/XHR then loads the original script.
+    var patchCode = '(' + scrubHlsManifest.toString() + ');\n' +
+      'var _kf=self.fetch;self.fetch=function(i,o){return _kf.call(this,i,o).then(function(r){' +
+      'var u=r.url||(typeof i==="string"?i:"");if(!u.includes(".m3u8"))return r;' +
+      'return r.text().then(function(t){var s=scrubHlsManifest(t);' +
+      'return new Response(s,{status:r.status,statusText:r.statusText,headers:r.headers});});});};' +
+      'importScripts(' + JSON.stringify(scriptUrl) + ');';
+    var blob = new Blob([patchCode], { type: 'application/javascript' });
+    var blobUrl = URL.createObjectURL(blob);
+    var worker = new OrigWorker(blobUrl, opts);
+    // Release blob URL after worker starts
+    setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 5000);
+    return worker;
+  };
+  window.Worker.prototype = OrigWorker.prototype;
 })();
 `;
 
