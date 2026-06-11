@@ -61,7 +61,7 @@ export default defineManifest({
   },
   web_accessible_resources: [
     {
-      resources: ['googletag-stub.js'],
+      resources: ['googletag-stub.js', 'hls-proxy.js'],
       matches: ['https://kick.com/*', 'https://www.kick.com/*'],
     },
   ],
