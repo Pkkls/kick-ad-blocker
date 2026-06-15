@@ -4,13 +4,44 @@ Lightweight browser extension that blocks ads on [Kick.com](https://kick.com). W
 
 Kick serves ads via Google Publisher Tags (GPT) and Google IMA SDK. This extension neutralizes both at the network and script level, so pre-roll and overlay ads never play.
 
-## Install (pre-built)
+## Install
 
-1. Download the latest release from [Releases](https://github.com/Pkkls/kick-ad-blocker/releases)
-2. Unzip the archive
-3. **Chrome / Brave / Edge**: go to `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the unzipped folder
-4. **Firefox**: go to `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → select `manifest.json` inside the unzipped folder
-5. Open any Kick stream — ads are blocked
+### Chrome, Brave, or Edge — easiest method (no build required)
+
+The `dist/` folder in this repo is the ready-to-load extension. You don't need to install Node.js or run any commands.
+
+**Step 1 — Download the repo**
+
+Click the green **Code** button on this page → **Download ZIP** → unzip it anywhere on your computer.
+
+**Step 2 — Open the extensions page**
+
+- Chrome: paste `chrome://extensions` in your address bar and press Enter
+- Brave: paste `brave://extensions`
+- Edge: paste `edge://extensions`
+
+**Step 3 — Enable Developer mode**
+
+In the top-right corner of the extensions page, toggle **Developer mode** ON. A new toolbar will appear.
+
+**Step 4 — Load the extension**
+
+Click **Load unpacked** → navigate to the folder you unzipped → open the `dist` folder inside it → click **Select Folder**.
+
+That's it. A green shield icon will appear in your toolbar. Open any Kick stream — ads are blocked.
+
+> **Important:** always select the `dist` folder, not the root folder of the repo. The root folder contains source code and has no `manifest.json` — Chrome will show an error if you load it.
+
+---
+
+### Firefox
+
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on**
+3. Navigate into the unzipped folder → open `dist` → select `manifest.json`
+4. Open any Kick stream — ads are blocked
+
+> Note: Firefox temporary add-ons are removed when the browser closes. A permanent install requires the extension to be signed by Mozilla.
 
 ## Build from source
 
