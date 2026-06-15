@@ -2,6 +2,7 @@ import { DomAdCleaner } from './dom-cleaner';
 import { VideoAdSkipper } from './video-ad-skipper';
 import { injectHlsProxy } from './hls-proxy';
 import { mountReportButton, unmountReportButton } from './report-button';
+import { startSsaiBlock, stopSsaiBlock } from './ssai-blocker';
 import { loadSettings, watchSettings } from '~/shared/settings';
 import { send } from '~/shared/messages';
 import { rootLogger } from '~/shared/logger';
@@ -78,6 +79,7 @@ function stopSkipper(): void {
 
 async function main(): Promise<void> {
   const settings = await loadSettings();
+  let currentSettings = settings;
   log.setEnabled(settings.debug);
 
   if (!settings.enabled) {
@@ -88,6 +90,15 @@ async function main(): Promise<void> {
   injectStub();
   if (settings.blockVideoAds) injectHlsProxy();
 
+  // SSAI dedup (declared here so both listeners share it). Map keeps insertion
+  // timestamp so we can evict stale entries and avoid unbounded growth.
+  const seenBreakIds = new Map<string, number>();
+  const rememberBreakId = (id: string): void => {
+    const now = Date.now();
+    for (const [k, ts] of seenBreakIds) if (now - ts > 120_000) seenBreakIds.delete(k);
+    seenBreakIds.set(id, now);
+  };
+
   // Bridge ad detections from the MAIN-world neutralizer: record forensic
   // evidence (and count the block) the moment Kick actually serves an ad.
   window.addEventListener('message', (e) => {
@@ -97,17 +108,27 @@ async function main(): Promise<void> {
       kind?: 'playback' | 'manifest' | 'video'; summary?: string;
       data?: Record<string, unknown>;
     } | null;
-    if (d?.source !== 'kab' || d.type !== 'adDetected' || !d.kind) return;
-    send({
-      type: 'detection.add',
-      payload: {
-        kind: d.kind,
-        ts: Date.now(),
-        channel: location.pathname.replace(/^\//, '') || location.hostname,
-        summary: d.summary ?? d.kind,
-        data: d.data ?? {},
-      },
-    }).catch(() => {});
+    if (d?.source !== 'kab') return;
+    if (d.type === 'adDetected' && d.kind) {
+      send({
+        type: 'detection.add',
+        payload: {
+          kind: d.kind,
+          ts: Date.now(),
+          channel: location.pathname.replace(/^\//, '') || location.hostname,
+          summary: d.summary ?? d.kind,
+          data: d.data ?? {},
+        },
+      }).catch(() => {});
+    }
+    if (d.type === 'ssai.skip') {
+      const skipBreakId = (d as any).breakId || '';
+      const skipDur = (d as any).duration || 30;
+      const skipRoll = (d as any).rollType || 'midroll';
+      if (skipBreakId && seenBreakIds.has(skipBreakId)) return;
+      if (skipBreakId) rememberBreakId(skipBreakId);
+      if (currentSettings.blockVideoAds) startSsaiBlock(skipDur, skipRoll);
+    }
   });
 
   if (settings.blockDom) {
@@ -131,13 +152,37 @@ async function main(): Promise<void> {
   };
   window.addEventListener('popstate', () => setTimeout(mountReportButton, 2_000));
 
+  // SSAI block: background detects ad markers via webRequest, sends command here.
+  // Returns true so Chrome keeps the message channel open and the SW's
+  // chrome.tabs.sendMessage gets an ack instead of a "No response" rejection.
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'ssai.block') return false;
+    if (!currentSettings.blockVideoAds) {
+      sendResponse({ type: 'ack' });
+      return false;
+    }
+    const dur: number = msg.payload?.duration || 30;
+    const breakId: string = msg.payload?.breakId || '';
+    const roll: string = msg.payload?.rollType || 'midroll';
+    if (breakId && seenBreakIds.has(breakId)) {
+      sendResponse({ type: 'ack' });
+      return false;
+    }
+    if (breakId) rememberBreakId(breakId);
+    log.info(`SSAI ad scrubbed: ${dur}s (breakId: ${breakId})`);
+    startSsaiBlock(dur, roll);
+    sendResponse({ type: 'ack' });
+    return false;
+  });
+
   watchSettings((next) => {
+    currentSettings = next;
     log.setEnabled(next.debug);
-    if (!next.enabled) { stopCleaner(); stopSkipper(); unmountReportButton(); return; }
+    if (!next.enabled) { stopCleaner(); stopSkipper(); stopSsaiBlock(); unmountReportButton(); return; }
     if (next.blockDom && !cleaner) startCleaner();
     if (!next.blockDom && cleaner) stopCleaner();
     if (next.blockVideoAds && !skipper) startSkipper();
-    if (!next.blockVideoAds && skipper) stopSkipper();
+    if (!next.blockVideoAds && skipper) { stopSkipper(); stopSsaiBlock(); }
     mountReportButton();
   });
 

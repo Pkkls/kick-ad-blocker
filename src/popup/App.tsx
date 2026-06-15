@@ -88,16 +88,15 @@ export function App() {
         </div>
       )}
 
-      {/* Ad detections — fired autonomously when Kick actually serves an ad */}
       {detections.length > 0 && (
         <div class="bg-red-900/30 border border-red-500/40 rounded-lg p-3 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-red-400">
-              Ad served by Kick — {detections.length} detection{detections.length > 1 ? 's' : ''}
+              {detections.length} detection{detections.length > 1 ? 's' : ''}
             </span>
           </div>
-          <div class="max-h-28 overflow-y-auto space-y-1">
-            {detections.slice(0, 6).map((d, i) => (
+          <div class="max-h-20 overflow-y-auto space-y-1">
+            {detections.slice(0, 3).map((d, i) => (
               <div key={i} class="text-xs text-red-300">
                 <span class="text-red-500">[{d.kind}]</span> {d.channel} — {d.summary}
               </div>

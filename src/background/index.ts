@@ -3,6 +3,7 @@ import { loadSettings, saveSettings, resetSettings } from '~/shared/settings';
 import { installKeepalive } from './keepalive';
 import { getStats, addDomHidden, addVideoAdBlocked, resetStats } from './stats';
 import { addDetection, listDetections, detectionCount, clearDetections } from './detections';
+import { installSsaiWatcher } from './ssai-watcher';
 import { rootLogger } from '~/shared/logger';
 
 const log = rootLogger.child('sw');
@@ -22,6 +23,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 installKeepalive();
+installSsaiWatcher();
 
 /* ── Badge ── */
 
@@ -98,7 +100,13 @@ onMessage(async (msg): Promise<RuntimeResponse | void> => {
       await addDetection(msg.payload);
       await addVideoAdBlocked(1);
       log.warn('Ad detected:', msg.payload.kind, msg.payload.summary);
-      await updateBadge();
+      if (msg.payload.kind === 'manifest' || msg.payload.kind === 'video') {
+        const stats = await getStats();
+        await chrome.action.setBadgeText({ text: String(stats.videoAdsBlocked) });
+        await chrome.action.setBadgeBackgroundColor({ color: '#53fc18' });
+      } else {
+        await updateBadge();
+      }
       return { type: 'ack' };
     }
     case 'detection.list': {

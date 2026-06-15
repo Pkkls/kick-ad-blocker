@@ -42,6 +42,9 @@ export default defineManifest({
     'storage',
     'alarms',
     'declarativeNetRequest',
+    // observation-only on MV3 Chrome (onCompleted / onBeforeRequest read-only);
+    // webRequestBlocking is not available in MV3 and is NOT listed here.
+    'webRequest',
   ],
   content_security_policy: {
     extension_pages: "script-src 'self'; object-src 'self'",
@@ -49,6 +52,7 @@ export default defineManifest({
   host_permissions: [
     'https://kick.com/*',
     'https://www.kick.com/*',
+    'https://*.live-video.net/*',
   ],
   declarative_net_request: {
     rule_resources: [
