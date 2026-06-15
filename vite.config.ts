@@ -6,6 +6,7 @@ import { crx } from '@crxjs/vite-plugin';
 import manifest from './manifest.config';
 
 export default defineConfig(({ mode }) => ({
+  base: '',
   resolve: {
     alias: { '~': resolve(__dirname, 'src') },
   },
